@@ -90,7 +90,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 	const peerSessionsCache = new NodeCache<boolean>({
 		stdTTL: DEFAULT_CACHE_TTLS.USER_DEVICES,
-		useClones: false
+		useClones: false,
+		maxKeys: 1000 // Limit cache size to prevent unbounded growth
 	})
 
 	// Initialize message retry manager if enabled

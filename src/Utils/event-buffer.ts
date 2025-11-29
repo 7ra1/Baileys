@@ -75,7 +75,9 @@ export const makeEventBuffer = (logger: ILogger): BaileysBufferableEventEmitter 
 	let isBuffering = false
 	let bufferTimeout: NodeJS.Timeout | null = null
 	let bufferCount = 0
-	const MAX_HISTORY_CACHE_SIZE = 10000 // Limit the history cache size to prevent memory bloat
+	// Limit the history cache size to prevent memory bloat. Lower default to keep memory bounded
+	// This can be increased if you need to buffer very large history sets, but defaults should be conservative.
+	const MAX_HISTORY_CACHE_SIZE = 200 // Reduced from 1000 to 200 to limit memory growth
 	const BUFFER_TIMEOUT_MS = 30000 // 30 seconds
 
 	// take the generic event and fire it as a baileys event
@@ -122,8 +124,9 @@ export const makeEventBuffer = (logger: ILogger): BaileysBufferableEventEmitter 
 			bufferTimeout = null
 		}
 
-		// Clear history cache if it exceeds the max size
-		if (historyCache.size > MAX_HISTORY_CACHE_SIZE) {
+		// Clear history cache more aggressively to prevent memory buildup
+		// Clear if exceeds max OR if we have significant buffer activity
+		if (historyCache.size > MAX_HISTORY_CACHE_SIZE || (historyCache.size > MAX_HISTORY_CACHE_SIZE / 2 && Object.keys(data.chatUpdates).length > 50)) {
 			logger.debug({ cacheSize: historyCache.size }, 'Clearing history cache')
 			historyCache.clear()
 		}

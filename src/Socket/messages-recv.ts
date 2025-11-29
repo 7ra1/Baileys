@@ -92,25 +92,28 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const msgRetryCache =
 		config.msgRetryCounterCache ||
 		new NodeCache<number>({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
+			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY,
+			useClones: false,
+			maxKeys: 1000 // Limit to 1000 entries to prevent memory bloat
 		})
 	const callOfferCache =
 		config.callOfferCache ||
 		new NodeCache<WACallEvent>({
-			stdTTL: DEFAULT_CACHE_TTLS.CALL_OFFER, // 5 mins
-			useClones: false
+			stdTTL: DEFAULT_CACHE_TTLS.CALL_OFFER,
+			useClones: false,
+			maxKeys: 100 // Limit to 100 concurrent calls
 		})
 
 	const placeholderResendCache =
 		config.placeholderResendCache ||
 		new NodeCache({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
+			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY,
+			useClones: false,
+			maxKeys: 500 // Limit placeholder resend cache
 		})
 
 	// Debounce identity-change session refreshes per JID to avoid bursts
-	const identityAssertDebounce = new NodeCache<boolean>({ stdTTL: 5, useClones: false })
+	const identityAssertDebounce = new NodeCache<boolean>({ stdTTL: 5, useClones: false, maxKeys: 200 })
 
 	let sendActiveReceipts = false
 
@@ -1443,7 +1446,19 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		const nodes: OfflineNode[] = []
 		let isProcessing = false
 
+		// Cap the offline node queue to avoid unbounded memory growth in pathological conditions.
+		// If the queue grows beyond this, oldest nodes will be dropped with a warning.
+		const MAX_OFFLINE_NODE_QUEUE = 1000 // Reduced from 5000 to 1000 to limit memory usage
+
 		const enqueue = (type: MessageType, node: BinaryNode) => {
+			// If queue is too large, drop the oldest node to keep memory bounded
+			if (nodes.length >= MAX_OFFLINE_NODE_QUEUE) {
+				try {
+					logger.warn({ queueSize: nodes.length }, 'offline node queue exceeded max size - dropping oldest node')
+				} catch {}
+				nodes.shift()
+			}
+
 			nodes.push({ type, node })
 
 			if (isProcessing) {
@@ -1544,10 +1559,16 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		}
 	})
 
-	ev.on('connection.update', ({ isOnline }) => {
+	ev.on('connection.update', ({ isOnline, connection }) => {
 		if (typeof isOnline !== 'undefined') {
 			sendActiveReceipts = isOnline
 			logger.trace(`sendActiveReceipts set to "${sendActiveReceipts}"`)
+		}
+
+		// Cleanup pending requests on connection close to prevent memory leaks
+		if (connection === 'close' && messageRetryManager) {
+			logger.debug('Cleaning up messageRetryManager on connection close')
+			messageRetryManager.cleanupPendingRequests()
 		}
 	})
 

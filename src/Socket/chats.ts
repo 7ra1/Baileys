@@ -81,8 +81,9 @@ export const makeChatsSocket = (config: SocketConfig) => {
 	const placeholderResendCache =
 		config.placeholderResendCache ||
 		(new NodeCache<number>({
-			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
-			useClones: false
+			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY,
+			useClones: false,
+			maxKeys: 500 // Limit cache size to prevent unbounded growth
 		}) as CacheStore)
 
 	if (!config.placeholderResendCache) {

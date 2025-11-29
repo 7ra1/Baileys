@@ -3,7 +3,7 @@ import type { proto } from '../../WAProto/index.js'
 import type { ILogger } from './logger'
 
 /** Number of sent messages to cache in memory for handling retry receipts */
-const RECENT_MESSAGES_SIZE = 512
+const RECENT_MESSAGES_SIZE = 256 // Reduced from 512 to 256 to limit memory usage
 
 const MESSAGE_KEY_SEPARATOR = '\u0000'
 
@@ -225,5 +225,22 @@ export class MessageRetryManager {
 
 		this.recentMessagesMap.delete(keyStr)
 		this.messageKeyIndex.delete(messageId)
+	}
+
+	/**
+	 * Cleanup all pending phone requests (useful for connection cleanup)
+	 */
+	cleanupPendingRequests(): void {
+		for (const messageId in this.pendingPhoneRequests) {
+			this.cancelPendingPhoneRequest(messageId)
+		}
+		this.logger.debug('Cleaned up all pending phone requests')
+	}
+
+	/**
+	 * Get current statistics
+	 */
+	getStatistics(): RetryStatistics {
+		return { ...this.statistics }
 	}
 }

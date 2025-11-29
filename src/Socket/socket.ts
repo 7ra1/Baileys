@@ -634,7 +634,13 @@ export const makeSocket = (config: SocketConfig) => {
 				date: new Date()
 			}
 		})
-		ev.removeAllListeners('connection.update')
+		try {
+			// flush any buffered events and remove all listeners to avoid memory leaks
+			if (typeof (ev as any).flush === 'function') (ev as any).flush()
+		} catch (err) {
+			logger.debug({ err }, 'error flushing event buffer during end')
+		}
+		;(ev as any).removeAllListeners()
 	}
 
 	const waitForSocketOpen = async () => {
